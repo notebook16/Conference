@@ -17,7 +17,7 @@ export default function LandingPage() {
 
       <div role="button">
         <Link to="/auth">
-          <button>Get Started</button> 
+          <button>Get Started</button>  
         </Link>
       </div>
     </div>
