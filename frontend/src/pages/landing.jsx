@@ -5,7 +5,7 @@ export default function LandingPage() {
   return (
     <div className="landing_container">
       <nav>
-        <p>Join as guest</p>
+        <p>Join as guest</p>   
         <br/>
         <p>Join meeting</p>
         <br/>
