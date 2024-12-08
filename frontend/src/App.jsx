@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import './App.css'
 import LandingPage from './pages/landing'
-import Auth from './pages/auth'
+import Auth from './pages/Auth'
 
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
