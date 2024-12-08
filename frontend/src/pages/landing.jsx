@@ -15,7 +15,7 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      <div role="button">
+      <div role="button">  
         <Link to="/auth">
           <button>Get Started</button>  
         </Link>
