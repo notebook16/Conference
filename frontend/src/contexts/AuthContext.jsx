@@ -8,7 +8,7 @@ export const AuthContext = createContext({});
 
 // Create axios client
 const client = axios.create({
-    baseURL: "http://localhost:8000/api/v1/users"
+    baseURL: `${server}/api/v1/users`
 });
 
 // The main function that provides context for authentication

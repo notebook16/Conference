@@ -12,9 +12,10 @@ import MicOffIcon from "@mui/icons-material/MicOff";
 import ScreenShareIcon from "@mui/icons-material/ScreenShare";
 import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
 import ChatIcon from "@mui/icons-material/Chat";
+import server from "../../environment";
 
 //our backend Url
-const server_URL = "http://localhost:8000";
+const server_URL =  server
 
 //here connections is differ from backend
 //in backend path(room url) is a key and socket.id are the array value for it
