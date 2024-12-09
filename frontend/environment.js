@@ -1,5 +1,5 @@
 
-let is_prod = false;
+let is_prod = true;
 
 
 const server= is_prod ?
