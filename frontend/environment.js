@@ -7,6 +7,7 @@ const server= is_prod ?
     "http://localhost:8000" 
 
 
+    console.log(server);
   
 
 export default server;

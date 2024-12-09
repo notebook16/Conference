@@ -7,7 +7,11 @@ export default function LandingPage() {
       <nav>
         <p>Join as guest</p>   
         <br/>
-        <p>Join meeting</p>
+        <div role="button">  
+        <Link to="/home">
+          <button>join meeting</button>  
+        </Link>
+      </div>
         <br/>
 
         <div role="button">
