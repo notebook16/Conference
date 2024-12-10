@@ -34,7 +34,7 @@ export default function VideoMeet() {
   var socketRef = useRef();
 
   //use to store the users socket Id , use ti differntiate different people
-  var socketIdRef = useRef();
+  var socketIdRef = useRef(); 
 
   //This useRef is used to store the reference to the local video element (a DOM element) where your webcam feed will be displayed.
   var localVideoref = useRef();
