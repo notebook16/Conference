@@ -5,66 +5,48 @@ import "../App.css";
 import { Button, IconButton, TextField } from "@mui/material";
 import RestoreIcon from "@mui/icons-material/Restore";
 import { AuthContext } from "../contexts/AuthContext";
-import { useEffect } from "react";
 
-function Home() {
-
-  // const [usernameFound, setUsernameFound] = useState(false);
-  // const [username, setUsername] = useState("");
-
-  // const storedUsername = localStorage.getItem("username");
-
-  // useEffect(() => {
-  //   if (storedUsername) {
-  //     setUsernameFound(true); // Set state if username is found
-  //     setUsername(storedUsername)
-  //   } else {
-  //     setUsernameFound(false); // Set state if no username
-  //   }
-  // }, [storedUsername]); // Dependency array ensures it runs only when username changes
-
-
-
+function NewMeet() {
   let navigate = useNavigate();
   const [meetingCode, setMeetingCode] = useState("");
 
   const { addToUserHistory } = useContext(AuthContext);
   let handleJoinVideoCall = async () => {
     await addToUserHistory(meetingCode);
-    // if (usernameFound) {
-    //   // If usernameFound is true, navigate with state containing the username
-    //   navigate(`/${meetingCode}`, { state: { username } });
-    // } else {
-    //   // If usernameFound is false, navigate without passing state
-     navigate(`/${meetingCode}`);
-    // }
-  }
+    navigate(`/${meetingCode}`);
+  };
 
   return (
     <>
-    <div  className="min-h-screen bg-gradient-to-br from-blue-400 via-pink-300 to-green-200
+    <div  class="min-h-screen bg-gradient-to-br from-blue-400 via-pink-300 to-green-200
 ">
         <div className="navBar">
           <div style={{ display: "flex", alignItems: "center" }}>
-           
-            
+            <IconButton
+              onClick={() => {
+                navigate("/history");
+              }}
+            >
+              <RestoreIcon />
+            </IconButton>
+            <p>History</p>
 
-            {/* <Button
+            <Button
               onClick={() => {
                 localStorage.removeItem("token");
-                localStorage.removeItem("username");
-                navigate("/");
+                navigate("/auth");
               }}
             >
               Logout
-            </Button> */}
+            </Button>
           </div>
         </div>
 
         <div className="meetContainer min-h-screen flex justify-center items-center">
           <div className="leftPanel text-center">
             <div>
-              <h2 className="mt-8 text-pretty text-lg font-medium text-black-500 sm:text-xl/8">Providing Quality Video Call Just Like oreo</h2>
+            <h2 className="mt-8 text-pretty text-lg font-medium text-black-500 sm:text-xl/8">Providing Quality Video Call Just Like oreo</h2>
+
 
               <div
                 style={{
@@ -74,7 +56,6 @@ function Home() {
                   alignItems: "center",
                 }}
               >
-                <br></br>
                 <TextField
                   onChange={(e) => setMeetingCode(e.target.value)}
                   id="outlined-basic"
@@ -87,7 +68,7 @@ function Home() {
                   variant="contained"
                   className="mt-4"
                 >
-                  Join
+                  create meeting
                 </Button>
               </div>
             </div>
@@ -98,4 +79,4 @@ function Home() {
   );
 }
 
-export default withAuth(Home);
+export default withAuth(NewMeet);

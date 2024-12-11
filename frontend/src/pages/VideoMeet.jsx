@@ -69,6 +69,19 @@ export default function VideoMeet() {
   let [videos, setVideos] = useState([]); // ?
 
   //1. this will run once and ask for permission
+
+  const getUsername = localStorage.getItem('username');
+  console.log(`username from storage ${getUsername}`)
+
+  useEffect(()=>{
+    if(getUsername){
+      setAskForUserName(false);
+    }
+    else{
+      setAskForUserName(true);
+    }
+  },[getUsername])
+
   useEffect(() => {
     console.log("permisssion use effect")
     getPermissions();
@@ -584,11 +597,18 @@ let handleEndCall = () => {
 
 
   return (
-    <div>
+    <div className=" h-screen w-screen overflow-hidden bg-gradient-to-br from-blue-400 via-pink-300 to-green-200">
       {askForUsername === true ? (
-        <div>
-          <h2>Enter into Lobby </h2>
+        <div className="flex flex-col justify-center items-center mt-16" 
+        >
+          
+          <div >
+            <video className="rounded-xl" ref={localVideoref} autoPlay muted></video>
+          </div>
 
+          <br></br>
+          <h2 className="text-balance text-5xl font-semibold tracking-tight text-gray-900 sm:text-7lg">Enter into Lobby </h2>
+<br></br>
           <TextField
             id="outlined-basic"
             label="username"
@@ -596,13 +616,10 @@ let handleEndCall = () => {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
           />
+          <br></br>
           <Button variant="contained" onClick={connect}>
-            Connect
+            Join as guest
           </Button>
-
-          <div>
-            <video ref={localVideoref} autoPlay muted></video>
-          </div>
         </div>
       ) : (
         <div className={styles.meetVideoContainer}> 

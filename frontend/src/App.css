@@ -2,6 +2,7 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  
 }
 
 .landing_container{
@@ -11,10 +12,6 @@
   
 }
 
-nav{
- margin-left: 50vw;
- margin-top: 50vh;
-}
 
 
 .landingPageContainer {
@@ -86,30 +83,5 @@ nav{
   text-align: center;
 
 }
-.meetContainer {
-  display: flex;
-  padding-inline: 20px;
-  height: 80vh;
-  gap: 10vw;
-  justify-content: center;
-}
 
 
-
-.leftPanel {
-  height: 100%;
-  display: flex;
-  align-items: center;
-
-}
-
-.rightPanel {
-  display: flex;
-  align-items: center;
-}
-
-.rightPanel > img {
-  width: 30vw;
-  height: auto;
-  border-radius: 20px;
-}

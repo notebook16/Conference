@@ -50,6 +50,7 @@ export const AuthProvider = ({ children }) => {
             console.log(request.data);
 
             if (request.status === httpStatus.OK) {
+                localStorage.setItem("username" , username)
                 localStorage.setItem("token", request.data.token);
                 navigate("/"); // Redirect to home page on successful login
             }

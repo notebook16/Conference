@@ -9,6 +9,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import VideoMeet from './pages/VideoMeet';
 import Home from './pages/Home';
 import History from './pages/History';
+import NewMeet from './pages/NewMeet';
 
 function App() {
  
@@ -21,6 +22,7 @@ function App() {
           <Route path = '/' element = { <LandingPage/>} />
           <Route path = '/auth' element = { <Auth/> }/>
           <Route path='/home' element = {<Home/>} />
+          <Route path='/NewMeet' element = {<NewMeet/>} />
           <Route path='/history' element={<History />} />
           <Route path='/:url' element= {<VideoMeet/>} />
         </Routes>
