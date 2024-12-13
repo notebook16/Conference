@@ -10,13 +10,14 @@ import { Button, IconButton, TextField } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 
 export default function LandingPage() {
-  const navigate = useNavigate();
-  const location = useLocation();
+
 
   const username = localStorage.getItem('username');
 
   
   const [usernameFound, setUsernameFound] = useState(false); // Initialize state
+
+
 
   useEffect(() => {
     if (username) {
@@ -24,9 +25,7 @@ export default function LandingPage() {
     } else {
       setUsernameFound(false); // Set state if no username
     }
-  }, []); // Dependency array ensures it runs only when username changes
-
-
+  }, [usernameFound]); // Dependency array ensures it runs only when username changes
 
 
   return (

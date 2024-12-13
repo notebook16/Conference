@@ -42,6 +42,7 @@ export default function Authentication() {
                 setUsername("");
                 setPassword("");
                 setError("");
+                
                 navigate('/');
             }
         } catch (err) {

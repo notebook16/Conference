@@ -29,8 +29,10 @@ export const AuthProvider = ({ children }) => {
                 password: password
             });
 
-            if (request.status === httpStatus.CREATED) {
-                return request.data.message;
+            localStorage.setItem("username" , username)
+            if (request.status === httpStatus.OK) {
+                localStorage.setItem("token", request.data.token);
+               
             }
         } catch (e) {
             console.error(e); // Log the error for debugging
@@ -46,13 +48,12 @@ export const AuthProvider = ({ children }) => {
                 password: password
             });
 
-            console.log(username, password);
-            console.log(request.data);
+           
 
             if (request.status === httpStatus.OK) {
                 localStorage.setItem("username" , username)
                 localStorage.setItem("token", request.data.token);
-                navigate("/"); // Redirect to home page on successful login
+         
             }
         } catch (e) {
             console.error(e); // Log the error for debugging
