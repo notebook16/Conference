@@ -14,6 +14,7 @@ import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
 import ChatIcon from "@mui/icons-material/Chat";
 import server from "../../environment";
 
+
 //our backend Url
 const server_URL =  server
 
@@ -52,7 +53,7 @@ export default function VideoMeet() {
   let [screen, setScreen] = useState();
 
   //This state is used to control the visibility of an emoji/hands-up modal. It tracks whether the modal should be shown or hidden.
-  let [showModel, setShowModel] = useState(true);
+  let [showModel, setShowModel] = useState(false);
 
   //to handle messages states
   let [messages, setMessages] = useState([]); //for all messages
@@ -87,8 +88,38 @@ export default function VideoMeet() {
     console.log("permisssion use effect")
     getPermissions();
   }, []);
-
-
+  const getGridStyle = (participantCount) => {
+    if (participantCount === 1) {
+      return {
+        display: 'grid',
+        gridTemplateColumns: '1fr',
+        gridTemplateRows: '1fr',
+        height: '100%',
+      };
+    } else if (participantCount === 2) {
+      return {
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        height: '100%',
+      };
+    } else if (participantCount === 3) {
+      return {
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gridTemplateRows: '1fr 1fr',
+        height: '100%',
+      };
+    } else {
+      return {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gridGap: '10px',
+        height: '100%',
+      };
+    }
+  };
+  
+  
 
   let getDisplayMediaSuccess = (stream) => {
     console.log("HERE")
@@ -589,8 +620,12 @@ let sendMessage = () => {
 
 let handleEndCall = () => {
   try {
+    
       let tracks = localVideoref.current.srcObject.getTracks()
       tracks.forEach(track => track.stop())
+      delete connections[socketIdRef.current]
+      console.log(` socked is ${connections[socketIdRef.current]}`)
+
   } catch (e) { }
   window.location.href = "/"
 }
@@ -630,7 +665,7 @@ let handleEndCall = () => {
               <div className={styles.chatContainer}>
                     <h1>Chat</h1>
 
-                    <div className={styles.chattingDisplay}>
+                    <div className={` overflow-y-auto  ${styles.chattingDisplay}`}>
 
                                 {messages.length !== 0 ? messages.map((item, index) => {
 
@@ -648,7 +683,7 @@ let handleEndCall = () => {
 
 
                             
-                            <div className={styles.chattingArea}>
+                            <div className={`fixed bottom-0  right-0 p-4 bg-white border-t border-gray-300 z-50 ${styles.chattingArea}`} >
                                 <TextField value={message} onChange={(e) => setMessage(e.target.value)} id="outlined-basic" label="Enter Your chat" variant="outlined" />
                                 <Button variant='contained' onClick={sendMessage}>Send</Button>
                             </div>
@@ -669,7 +704,7 @@ let handleEndCall = () => {
               {video === true ? <VideocamIcon /> : <VideocamOffIcon />}
             </IconButton>
 
-            <IconButton  onClick={handleEndCall} style={{ color: "red" }}>
+            <IconButton  onClick={handleEndCall}  style={{ color: "red" }}>
               <CallEndIcon />
             </IconButton>
 
@@ -703,7 +738,7 @@ let handleEndCall = () => {
             muted
           />
 
-          <div className={styles.conferenceView}>
+          <div className={styles.conferenceView} style={getGridStyle(videos.length)}>
             {videos.map((video) => (
               <div key={video.socketId}>
                 <video
