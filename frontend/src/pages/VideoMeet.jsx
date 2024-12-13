@@ -76,6 +76,7 @@ export default function VideoMeet() {
   useEffect(()=>{
     if(getUsername){
       setAskForUserName(false);
+      getMedia();
     }
     else{
       setAskForUserName(true);
