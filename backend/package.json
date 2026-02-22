@@ -20,7 +20,10 @@
     "mongodb": "^6.11.0",
     "mongoose": "^8.8.2",
     "nodemon": "^3.1.7",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "@grpc/grpc-js": "^1.8.17",
+    "@grpc/proto-loader": "^0.7.6",
+    "redis": "^4.6.7"
   }
 
   
