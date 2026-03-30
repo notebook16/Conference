@@ -1,3 +1,6 @@
+import { loadEnv } from "./loadEnv.js";
+loadEnv();
+
 import express from  "express";
 import {createServer} from "node:http";
 
@@ -13,6 +16,7 @@ import { attachAudioPipeline } from "./controllers/audioPipelineManager.js";
 import { startFlushWorker } from "./controllers/flushWorker.js";
 
 import userRoutes from "./routes/user.js";
+import transcriptRoutes from "./routes/transcript.js";
 
 
 const app = express();
@@ -66,6 +70,7 @@ app.use(express.urlencoded({limit: "40kb" , extended: true})) //to parse html fo
 
 
 app.use("/api/v1/users", userRoutes);
+app.use("/api/v1/transcript", transcriptRoutes);
 
 
 

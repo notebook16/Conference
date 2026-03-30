@@ -1,6 +1,7 @@
 import { createClient as createRedisClient } from "redis";
 import { TranscriptSegment } from "../models/transcriptSegment.js";
 import { TranscriptDocument } from "../models/transcriptDocument.js";
+import { meetingIdFromTranscriptBufferKey } from "../utils/meetingRoomKey.js";
 
 let redisClient;
 
@@ -83,10 +84,8 @@ export async function startFlushWorker(opts = {}) {
             } catch (e) {}
           });
 
-          // Map key -> meetingId
-          // key format: transcripts:buffer:{meetingId}
-          const parts = key.split(":");
-          const meetingId = parts.slice(2).join(":") || null;
+          // Same string as socket join / Mongo segment.meetingId (URLs contain ":" — do not split on ":")
+          const meetingId = meetingIdFromTranscriptBufferKey(key);
 
           if (meetingId && insertedIds.length > 0) {
             const td = await TranscriptDocument.findOneAndUpdate(

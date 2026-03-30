@@ -10,7 +10,8 @@ const ContextSectionSchema = new Schema({
 }, { _id: false });
 
 const ContextSummarySchema = new Schema({
-  meetingId: { type: Schema.Types.ObjectId, ref: "Meeting", required: true, index: true },
+  // ObjectId when tied to Meeting; string when the pipeline uses URL-style room keys (same as TranscriptSegment).
+  meetingId: { type: Schema.Types.Mixed, required: true, index: true },
   generatedAt: { type: Date, default: Date.now },
   sections: { type: [ContextSectionSchema], default: [] },
   modelMeta: { type: Schema.Types.Mixed, default: {} }

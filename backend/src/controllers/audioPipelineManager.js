@@ -3,12 +3,13 @@ import { fileURLToPath } from "url";
 import grpc from "@grpc/grpc-js";
 import protoLoader from "@grpc/proto-loader";
 import { createClient as createRedisClient } from "redis";
+import { transcriptBufferKey } from "../utils/meetingRoomKey.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// proto lives at workspace_root/microservices/dummy-asr/proto/transcription.proto
-const PROTO_PATH = path.join(__dirname, "..", "..", "..", "..", "microservices", "dummy-asr", "proto", "transcription.proto");
+// Same proto as asr-service (workspace_root/asr-service/proto/asr.proto)
+const PROTO_PATH = path.join(__dirname, "..", "..", "..", "..", "asr-service", "proto", "asr.proto");
 
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
   keepCase: true,
@@ -18,7 +19,7 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
   oneofs: true,
 });
 
-const proto = grpc.loadPackageDefinition(packageDefinition).transcription;
+const proto = grpc.loadPackageDefinition(packageDefinition).asr;
 
 let redisClient;
 
@@ -35,93 +36,134 @@ async function initRedis() {
 export async function attachAudioPipeline(io, opts = {}) {
   const grpcAddress = opts.grpcAddress || process.env.ASR_GRPC_ADDR || "localhost:50051";
   console.log(`Audio pipeline will connect to gRPC ASR at ${grpcAddress}`);
-  const client = new proto.Transcription(grpcAddress, grpc.credentials.createInsecure());
-  console.log("Created gRPC client for Transcription service");
+  const client = new proto.ASR(grpcAddress, grpc.credentials.createInsecure());
+  console.log("Created gRPC client for ASR service");
   await initRedis();
 
-  // Use a namespaced socket to keep audio concerns separate
   const audioNs = io.of("/audio");
 
   audioNs.on("connection", (socket) => {
     console.log("Audio namespace connection:", socket.id);
 
-    // show socket rooms / handshake info
     try {
       console.log("Socket handshake query:", socket.handshake.query);
     } catch (e) {}
 
-    let grpcCall = client.StreamAudio();
-    console.log("Opened new gRPC client stream for socket", socket.id);
+    let grpcCall = null;
+    let segmentSequence = 0;
+    let nonPcmWarned = false;
 
-    grpcCall.on("data", async (segment) => {
-      try {
-        // segment fields come as plain JS objects; broadcast to meeting room
-        const meetingId = segment.meetingId || socket.meetingId;
-        if (meetingId) {
-          audioNs.to(meetingId).emit("new-transcript", segment);
-          console.log(`🛰️ Broadcasted segment -> meeting=${meetingId} seq=${segment.sequence} start=${segment.startTs}s end=${segment.endTs}s speaker=${segment.speakerId}`);
-          console.log("📝 Segment preview:", (segment.text || "").slice(0, 200));
+    function attachStreamHandlers(call) {
+      call.on("data", async (segment) => {
+        try {
+          const meetingId = socket.meetingId || "unknown";
+          const text = segment.sentence || "";
+          console.log(`📥 Received from ASR -> text=${JSON.stringify(text)} meetingId=${meetingId}`);
+          const payload = {
+            meetingId,
+            startTs: segment.start_ts,
+            endTs: segment.end_ts,
+            text,
+            sequence: segmentSequence++,
+            speakerId: socket.speakerId || "",
+          };
+          if (meetingId !== "unknown") {
+            audioNs.to(meetingId).emit("new-transcript", payload);
+            console.log(`🛰️ Broadcasted -> meeting=${meetingId} text=${JSON.stringify(text)} startTs=${payload.startTs} endTs=${payload.endTs}`);
+          } else {
+            console.warn("⚠️ meetingId unknown, transcript not broadcast");
+          }
+
+          const key = transcriptBufferKey(meetingId);
+          const segmentJson = JSON.stringify(payload);
+          const pushedCount = await redisClient.rPush(key, segmentJson);
+          console.log(`💾 Pushed segment -> Redis key=${key} (list length after push=${pushedCount})`);
+        } catch (err) {
+          console.error("Error handling transcript segment:", err);
         }
+      });
 
-        // push into redis buffer list
-        const key = `transcripts:buffer:${segment.meetingId || "unknown"}`;
-        const segmentJson = JSON.stringify(segment);
-        const pushedCount = await redisClient.rPush(key, segmentJson);
-        console.log(`💾 Pushed segment -> Redis key=${key} (list length after push=${pushedCount})`);
-        console.log("🔍 Segment JSON saved to Redis:", segmentJson);
-      } catch (err) {
-        console.error("Error handling transcript segment:", err);
-      }
-    });
+      call.on("metadata", (meta) => {
+        try {
+          console.log("🧾 gRPC metadata:", meta.getMap ? meta.getMap() : meta);
+        } catch (e) {}
+      });
 
-    grpcCall.on("metadata", (meta) => {
-      try {
-        console.log("🧾 gRPC metadata:", meta.getMap ? meta.getMap() : meta);
-      } catch (e) {}
-    });
+      call.on("status", (status) => {
+        console.log("gRPC stream status for socket", socket.id, status);
+      });
 
-    grpcCall.on("status", (status) => {
-      console.log("gRPC stream status for socket", socket.id, status);
-    });
+      call.on("end", () => {
+        console.log("gRPC stream ended by server for socket", socket.id);
+        if (grpcCall === call) grpcCall = null;
+      });
 
-    grpcCall.on("end", () => {
-      console.log("gRPC stream ended by server for socket", socket.id);
-    });
+      call.on("error", (err) => {
+        console.error("gRPC stream error:", err);
+        if (grpcCall === call) grpcCall = null;
+      });
+    }
 
-    grpcCall.on("error", (err) => {
-      console.error("gRPC stream error:", err);
-    });
+    function ensureGrpcStream() {
+      if (grpcCall) return;
+      grpcCall = client.StreamAudio();
+      attachStreamHandlers(grpcCall);
+      console.log("Opened new gRPC client stream for socket", socket.id);
+    }
 
     socket.on("join", (meetingId) => {
       socket.join(meetingId);
       socket.meetingId = meetingId;
       console.log(`Socket ${socket.id} joined audio room ${meetingId}`);
+      try {
+        ensureGrpcStream();
+        console.log("gRPC stream opened after join (ready for PCM)");
+      } catch (err) {
+        console.error("Failed to open gRPC stream on join:", err);
+      }
     });
 
-    // Expect payload: { data: Uint8Array|Buffer, timestamp, meetingId, speakerId, seq }
     socket.on("stream-audio", (payload) => {
-      console.log(`🎧 Received stream-audio from socket=${socket.id} seq=${payload.seq} meeting=${payload.meetingId} speaker=${payload.speakerId}`);
+      const encoding = payload.encoding || "(unknown)";
+      const data = payload.data ? (Buffer.isBuffer(payload.data) ? payload.data : Buffer.from(payload.data)) : Buffer.alloc(0);
+      const len = data.length;
+
+      // Explicit PCM only, or small even-sized chunks (typical 100ms PCM ~3200 bytes) — never treat large WebM as PCM
+      let acceptAsPcm =
+        encoding === "pcm_16k_16bit_mono" ||
+        (encoding === "(unknown)" && len % 2 === 0 && len >= 320 && len <= 8192);
+
+      if (!acceptAsPcm) {
+        if (!nonPcmWarned) {
+          console.warn(
+            `⚠️ Ignoring audio (encoding="${encoding}", size=${len}). Send pcm_16k_16bit_mono from frontend.`
+          );
+          nonPcmWarned = true;
+        }
+        return;
+      }
+
+      if (encoding === "(unknown)" && !nonPcmWarned) {
+        console.warn("⚠️ No encoding field; treating as PCM (add encoding: pcm_16k_16bit_mono on frontend).");
+        nonPcmWarned = true;
+      }
+
       try {
-        const chunk = {
-          data: payload.data || Buffer.from([]),
-          timestamp: payload.timestamp || Date.now(),
-          meetingId: payload.meetingId || socket.meetingId || "",
-          speakerId: payload.speakerId || "",
-          seq: payload.seq || 0
-        };
-        // show chunk size and write to gRPC stream
-        const size = chunk.data ? (chunk.data.length || (chunk.data.byteLength ? chunk.data.byteLength : 0)) : 0;
-        console.log(`⬆️ Sending chunk -> meeting=${chunk.meetingId} seq=${chunk.seq} size=${size} bytes speaker=${chunk.speakerId}`);
-        grpcCall.write(chunk);
-        console.log(`✅ Wrote chunk to gRPC for socket=${socket.id} seq=${chunk.seq}`);
+        ensureGrpcStream();
+        if (payload.speakerId) socket.speakerId = payload.speakerId;
+        grpcCall.write({ audio_chunk: data });
       } catch (err) {
-        console.error("Failed to write audio chunk to gRPC:", err);
+        console.error("Failed to write stream-audio to gRPC:", err);
       }
     });
 
     socket.on("end-audio", () => {
       try {
-        grpcCall.end();
+        if (grpcCall) {
+          grpcCall.end();
+          grpcCall = null;
+          console.log("Closed gRPC stream for socket (end-audio)", socket.id);
+        }
       } catch (err) {
         console.error("Error ending gRPC stream:", err);
       }
@@ -129,7 +171,10 @@ export async function attachAudioPipeline(io, opts = {}) {
 
     socket.on("disconnect", () => {
       try {
-        grpcCall.end();
+        if (grpcCall) {
+          grpcCall.end();
+          grpcCall = null;
+        }
       } catch (err) {}
       console.log("Audio socket disconnected:", socket.id);
     });
@@ -137,4 +182,3 @@ export async function attachAudioPipeline(io, opts = {}) {
 
   return audioNs;
 }
-
