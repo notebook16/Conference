@@ -8,8 +8,8 @@ import { transcriptBufferKey } from "../utils/meetingRoomKey.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Same proto as asr-service (workspace_root/asr-service/proto/asr.proto)
-const PROTO_PATH = path.join(__dirname, "..", "..", "..", "..", "asr-service", "proto", "asr.proto");
+// Backend-local proto to avoid cross-service path coupling on Render.
+const PROTO_PATH = path.join(__dirname, "..", "proto", "asr.proto");
 
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
   keepCase: true,
