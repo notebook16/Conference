@@ -1,14 +1,10 @@
+const envServer = (import.meta.env.VITE_SERVER_URL || "").trim();
+const defaultServer = import.meta.env.PROD
+  ? "https://conference-3cu1.onrender.com"
+  : "http://localhost:8000";
 
-let is_prod = false;
+const server = (envServer || defaultServer).replace(/\/+$/, "");
 
-
-const server= is_prod ?
- "https://conference-3cu1.onrender.com" :
-    "http://localhost:8000" 
-
-
-
-    console.log(server);
-  
+console.log("Frontend server base URL:", server);
 
 export default server;
