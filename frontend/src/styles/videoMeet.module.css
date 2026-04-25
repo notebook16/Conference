@@ -4,6 +4,24 @@
     background: rgb(1, 4, 48);
 }
 
+.meetingTimer {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.85);
+    color: #e5e7eb;
+    border: 1px solid rgba(148, 163, 184, 0.6);
+    font-size: 0.85rem;
+    font-weight: 500;
+    z-index: 70;
+}
+
 body, html {
     margin: 0;
     padding: 0;
@@ -78,8 +96,211 @@ body, html {
     height: 100%;
 }
 
+.chatHeader {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.chatSubBar {
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.chattingDisplay {
+    max-height: calc(90vh - 240px);
+    padding-bottom: 120px;
+    box-sizing: border-box;
+}
+
 
 .chattingArea {
    width: 30vw;
     bottom: 0;
+}
+
+/* Meeting context panel (left side) */
+.contextPanel {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 90vh;
+    width: min(440px, 92vw);
+    margin: 12px;
+    background: linear-gradient(165deg, #0f172a 0%, #1e293b 55%, #0f172a 100%);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 16px;
+    padding: 16px 18px 20px;
+    overflow-y: auto;
+    z-index: 60;
+    box-shadow: 8px 8px 32px rgba(0, 0, 0, 0.45);
+    color: #e2e8f0;
+}
+
+.contextHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.contextTitle {
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #f8fafc;
+}
+
+.timeBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    color: #94a3b8;
+    background: rgba(30, 41, 59, 0.8);
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    margin-bottom: 12px;
+}
+
+.overviewText {
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: #cbd5e1;
+    margin-bottom: 16px;
+}
+
+.timeline {
+    position: relative;
+    padding-left: 4px;
+}
+
+.timelineItem {
+    position: relative;
+    padding-left: 28px;
+    padding-bottom: 18px;
+}
+
+.timelineItem:last-child {
+    padding-bottom: 4px;
+}
+
+.timelineConnector {
+    position: absolute;
+    left: 11px;
+    top: 22px;
+    bottom: -4px;
+    width: 2px;
+    background: linear-gradient(180deg, #38bdf8 0%, #6366f1 100%);
+    opacity: 0.65;
+    border-radius: 2px;
+}
+
+.timelineItem:last-child .timelineConnector {
+    display: none;
+}
+
+.timelineDot {
+    position: absolute;
+    left: 5px;
+    top: 4px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #38bdf8, #6366f1);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+    z-index: 1;
+}
+
+.stepBody {
+    flex: 1;
+    min-width: 0;
+}
+
+.stepTime {
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+    color: #94a3b8;
+    margin-bottom: 6px;
+    letter-spacing: 0.02em;
+}
+
+.stepRowHead {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.stepIndex {
+    display: inline-block;
+    min-width: 1.5rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #38bdf8;
+    flex-shrink: 0;
+    padding-top: 2px;
+}
+
+.stepMain {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: #f1f5f9;
+    flex: 1;
+}
+
+.highlightTime {
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    color: #94a3b8;
+}
+
+.subPoints {
+    margin: 8px 0 0 0;
+    padding-left: 18px;
+    border-left: 2px solid rgba(99, 102, 241, 0.45);
+    list-style: none;
+}
+
+.subPoints li {
+    position: relative;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: #cbd5e1;
+    margin-bottom: 6px;
+    padding-left: 4px;
+}
+
+.subPoints li::before {
+    content: "◦";
+    position: absolute;
+    left: -14px;
+    color: #a5b4fc;
+}
+
+.highlightsBlock {
+    margin-top: 8px;
+    padding: 12px 12px 10px;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.highlightsTitle {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #a5b4fc;
+    margin-bottom: 8px;
 }

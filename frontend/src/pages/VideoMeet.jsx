@@ -3,7 +3,14 @@ import styles from "../styles/videoMeet.module.css";
 // import TextField from '@mui/material/TextField';
 import Button from "@mui/material/Button";
 import io from "socket.io-client";
-import { Badge, IconButton, TextField } from "@mui/material";
+import {
+  Badge,
+  IconButton,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from "@mui/material";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import VideocamOffIcon from "@mui/icons-material/VideocamOff";
 import CallEndIcon from "@mui/icons-material/CallEnd";
@@ -12,7 +19,67 @@ import MicOffIcon from "@mui/icons-material/MicOff";
 import ScreenShareIcon from "@mui/icons-material/ScreenShare";
 import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
 import ChatIcon from "@mui/icons-material/Chat";
+import SummarizeIcon from "@mui/icons-material/Summarize";
+import CloseIcon from "@mui/icons-material/Close";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import CircularProgress from "@mui/material/CircularProgress";
+import Alert from "@mui/material/Alert";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import server from "../../environment";
+
+function formatMeetingTime(s) {
+  if (s == null || Number.isNaN(Number(s))) return "—";
+  const total = Number(s);
+  const m = Math.floor(total / 60);
+  const r = total - m * 60;
+  const hasFrac = Math.abs(r - Math.floor(r)) > 1e-6;
+  const rStr = hasFrac ? r.toFixed(1) : String(Math.floor(r)).padStart(2, "0");
+  return `${m}:${rStr}`;
+}
+
+/** e.g. 0:12 – 1:45 from seconds since meeting start */
+function formatTimeRangeLabel(startTs, endTs) {
+  if (startTs == null && endTs == null) return null;
+  if (startTs != null && endTs != null) {
+    return `${formatMeetingTime(startTs)} – ${formatMeetingTime(endTs)}`;
+  }
+  if (startTs != null) return formatMeetingTime(startTs);
+  return formatMeetingTime(endTs);
+}
+
+function splitChainPoint(text) {
+  const lines = String(text)
+    .split(/\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  return { main: lines[0] || String(text), sub: lines.slice(1) };
+}
+
+/** API chain items: { text, startTs, endTs } or legacy string */
+function normalizeContextChainPoint(point) {
+  if (typeof point === "string") {
+    const { main, sub } = splitChainPoint(point);
+    return { main, sub, startTs: null, endTs: null };
+  }
+  const text = String(point.text ?? "").trim();
+  const { main, sub } = splitChainPoint(text);
+  const startTs =
+    point.startTs != null && !Number.isNaN(Number(point.startTs)) ? Number(point.startTs) : null;
+  const endTs =
+    point.endTs != null && !Number.isNaN(Number(point.endTs)) ? Number(point.endTs) : null;
+  return { main, sub, startTs, endTs };
+}
+
+function normalizeHighlightItem(h) {
+  if (typeof h === "string") {
+    return { text: h, startTs: null, endTs: null };
+  }
+  return {
+    text: String(h.text ?? "").trim(),
+    startTs: h.startTs != null && !Number.isNaN(Number(h.startTs)) ? Number(h.startTs) : null,
+    endTs: h.endTs != null && !Number.isNaN(Number(h.endTs)) ? Number(h.endTs) : null,
+  };
+}
 
 
 //our backend Url
@@ -35,7 +102,18 @@ export default function VideoMeet() {
   var socketRef = useRef();
   var audioSocketRef = useRef();
   var mediaRecorderRef = useRef();
+  var audioContextRef = useRef();
+  var pcmCaptureRef = useRef({ processor: null, pcmBuffer: [], targetSampleRate: 16000 });
   let [captions, setCaptions] = useState([]);
+
+  const [showContextPanel, setShowContextPanel] = useState(false);
+  const [contextLoading, setContextLoading] = useState(false);
+  const [contextError, setContextError] = useState(null);
+  const [contextData, setContextData] = useState(null);
+
+  const [showMeetingTimer, setShowMeetingTimer] = useState(true);
+  const [meetingStartMs, setMeetingStartMs] = useState(null);
+  const [nowMs, setNowMs] = useState(null);
 
   //use to store the users socket Id , use ti differntiate different people
   var socketIdRef = useRef(); 
@@ -62,6 +140,13 @@ export default function VideoMeet() {
   let [messages, setMessages] = useState([]); //for all messages
   let [message, setMessage] = useState(""); //for our writting message changes
   let [newMessages, setNewMessages] = useState(3); //for new message notification
+
+  const [chatUiMode, setChatUiMode] = useState("room");
+  const [aiContextMode, setAiContextMode] = useState("context");
+  const [aiChatMessages, setAiChatMessages] = useState([]);
+  const [aiChatLoading, setAiChatLoading] = useState(false);
+  const [aiContextInfo, setAiContextInfo] = useState(null); // { upToTs, generatedAt }
+  const [aiContextInfoLoading, setAiContextInfoLoading] = useState(false);
 
   //ask for username who login as guest // ?
   let [askForUsername, setAskForUserName] = useState(true); //if get username do false and show room on true show only camera of their own
@@ -243,6 +328,11 @@ export default function VideoMeet() {
   //9. then the connection beteeen peers is stablished with "connectToSocketServer"
   let getMedia = () => {
     console.log("get media called")
+    if (!meetingStartMs) {
+      const now = Date.now();
+      setMeetingStartMs(now);
+      setNowMs(now);
+    }
     setVideo(videoAvailable);
     setAudio(audioAvailable);
     connectToSocketServer();
@@ -316,6 +406,14 @@ export default function VideoMeet() {
           }
         })
     );
+
+    if (stream.getAudioTracks().length > 0) {
+      if (audioSocketRef.current?.connected) {
+        startSendingAudio();
+      } else {
+        audioSocketRef.current?.once("connect", () => startSendingAudio());
+      }
+    }
   };
 
   //8.2.1 this function use used to get the current stream(can be audio or video) and send it to function "getMediaSuccess" for further operation
@@ -613,62 +711,102 @@ export default function VideoMeet() {
     // getUserMedia();
   };
 
-  // start sending audio chunks from window.localStream to backend /audio namespace
+  // Raw PCM 16kHz 16-bit mono — required by ASR (backend forwards to gRPC; WebM is rejected)
+  const ASR_WINDOW_SECONDS = 2.0;
+  const CHUNK_MS = 100;
+
   const startSendingAudio = async () => {
     try {
-      if (!audioSocketRef.current || !audioSocketRef.current.connected) {
+      const capture = pcmCaptureRef.current;
+      if (capture.processor) return;
+      if (!audioSocketRef.current?.connected) {
         console.warn("audio socket not connected");
         return;
       }
 
-      // prefer existing local audio track; if absent, request an audio-only stream
       let stream = window.localStream;
       if (!stream) {
-        console.warn("no local stream available for audio capture, requesting audio-only");
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
-
-      // create MediaRecorder for audio track only
-      let audioTracks = stream.getAudioTracks();
-      if (!audioTracks || audioTracks.length === 0) {
-        console.warn("no audio tracks found on localStream, attempting to request audio-only");
-        const fresh = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
-        if (fresh) {
-          audioTracks = fresh.getAudioTracks();
-          stream = fresh;
-        }
-      }
-
-      if (!audioTracks || audioTracks.length === 0) {
-        console.warn("still no audio tracks found; cannot start MediaRecorder");
+      const audioTracks = stream.getAudioTracks();
+      if (!audioTracks?.length) {
+        console.warn("no audio tracks; cannot start PCM capture");
         return;
       }
 
-      const audioOnlyStream = new MediaStream([audioTracks[0]]);
-      const options = { mimeType: "audio/webm" };
-      // feature-detect mime type support
-      if (!MediaRecorder.isTypeSupported || !MediaRecorder.isTypeSupported(options.mimeType)) {
-        delete options.mimeType;
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) {
+        console.error("Web Audio API not supported");
+        return;
       }
-      const mr = new MediaRecorder(audioOnlyStream, options);
-      mediaRecorderRef.current = mr;
+
+      const TARGET_SAMPLE_RATE = 16000;
+      const ctx = new AudioContextClass({ sampleRate: TARGET_SAMPLE_RATE });
+      audioContextRef.current = ctx;
+      const source = ctx.createMediaStreamSource(new MediaStream([audioTracks[0]]));
+
+      const bufferSize = 4096;
+      const processor = ctx.createScriptProcessor(bufferSize, 1, 1);
+      capture.processor = processor;
+      capture.pcmBuffer = [];
       let seq = 0;
-      mr.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
+      const inputRate = ctx.sampleRate;
+      const needResample = Math.abs(inputRate - TARGET_SAMPLE_RATE) > 100;
+      const ratio = needResample ? inputRate / TARGET_SAMPLE_RATE : 1;
+
+      function float32ToInt16(float32Array) {
+        const int16 = new Int16Array(float32Array.length);
+        for (let i = 0; i < float32Array.length; i++) {
+          const s = Math.max(-1, Math.min(1, float32Array[i]));
+          int16[i] = s < 0 ? s * 32768 : s * 32767;
+        }
+        return int16;
+      }
+
+      function downsampleTo16k(inputFloat) {
+        if (!needResample) return float32ToInt16(inputFloat);
+        const outLength = Math.floor(inputFloat.length / ratio);
+        const out = new Int16Array(outLength);
+        for (let i = 0; i < outLength; i++) {
+          const srcIdx = i * ratio;
+          const idx = Math.floor(srcIdx);
+          const frac = srcIdx - idx;
+          const s = idx + 1 < inputFloat.length
+            ? inputFloat[idx] * (1 - frac) + inputFloat[idx + 1] * frac
+            : inputFloat[idx];
+          const clamped = Math.max(-1, Math.min(1, s));
+          out[i] = clamped < 0 ? clamped * 32768 : clamped * 32767;
+        }
+        return out;
+      }
+
+      processor.onaudioprocess = (e) => {
+        if (!audioSocketRef.current?.connected) return;
+        const floatData = e.inputBuffer.getChannelData(0);
+        const int16Data = downsampleTo16k(floatData);
+        for (let i = 0; i < int16Data.length; i++) capture.pcmBuffer.push(int16Data[i]);
+        const samplesPerChunk = (TARGET_SAMPLE_RATE * CHUNK_MS) / 1000;
+        while (capture.pcmBuffer.length >= samplesPerChunk) {
+          const chunk = capture.pcmBuffer.splice(0, samplesPerChunk);
+          const buf = new Int16Array(chunk.length);
+          for (let i = 0; i < chunk.length; i++) buf[i] = chunk[i];
           audioSocketRef.current.emit("stream-audio", {
-            data: e.data,
+            data: buf.buffer,
+            encoding: "pcm_16k_16bit_mono",
             timestamp: Date.now(),
             meetingId: window.location.href,
             speakerId: username || "guest",
-            seq: seq++
+            seq: seq++,
           });
-          console.log("Sent audio chunk seq", seq - 1);
         }
       };
-      mr.onstart = () => console.log("MediaRecorder started");
-      mr.onstop = () => console.log("MediaRecorder stopped");
-      // timeslice 1000ms for 1s chunks
-      mr.start(1000);
+
+      source.connect(processor);
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      processor.connect(gain);
+      gain.connect(ctx.destination);
+      console.log("PCM capture started (16kHz mono) for ASR — window ref", ASR_WINDOW_SECONDS, "s");
     } catch (err) {
       console.error("Failed to start sending audio:", err);
     }
@@ -676,18 +814,36 @@ export default function VideoMeet() {
 
   const stopSendingAudio = () => {
     try {
-      const mr = mediaRecorderRef.current;
-      if (mr && mr.state !== "inactive") {
-        mr.stop();
+      const capture = pcmCaptureRef.current;
+      if (capture.processor) {
+        try {
+          capture.processor.disconnect();
+        } catch (_) {}
+        capture.processor = null;
+        capture.pcmBuffer = [];
       }
-      mediaRecorderRef.current = null;
-      if (audioSocketRef.current && audioSocketRef.current.connected) {
+      const ctx = audioContextRef.current;
+      if (ctx && ctx.state !== "closed") {
+        ctx.close().catch(() => {});
+        audioContextRef.current = null;
+      }
+      if (audioSocketRef.current?.connected) {
         audioSocketRef.current.emit("end-audio");
       }
+      console.log("PCM capture stopped");
     } catch (err) {
       console.error("Failed to stop sending audio:", err);
     }
   };
+
+  // drive meeting elapsed timer
+  useEffect(() => {
+    if (!meetingStartMs) return;
+    const id = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(id);
+  }, [meetingStartMs]);
 
 
  useEffect(() => {
@@ -711,7 +867,42 @@ let addMessage = (data,sender,socketIdSender) => {
 }
 
 
+  const sendAiMessage = async () => {
+    const text = message.trim();
+    if (!text || aiChatLoading) return;
+    setAiChatMessages((prev) => [...prev, { role: "user", text }]);
+    setMessage("");
+    setAiChatLoading(true);
+    try {
+      const res = await fetch(`${server_URL}/api/v1/transcript/ai-chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          meetingId: window.location.href,
+          message: text,
+          useContext: aiContextMode === "context",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.message || `Request failed (${res.status})`);
+      }
+      setAiChatMessages((prev) => [...prev, { role: "assistant", text: data.answer || "" }]);
+    } catch (e) {
+      setAiChatMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: `Error: ${e.message || String(e)}` },
+      ]);
+    } finally {
+      setAiChatLoading(false);
+    }
+  };
+
 let sendMessage = () => {
+  if (chatUiMode === "ai") {
+    sendAiMessage();
+    return;
+  }
   console.log(socketRef.current);
   socketRef.current.emit('chat-message', message, username)
   setMessage("");
@@ -719,6 +910,76 @@ let sendMessage = () => {
   // this.setState({ message: "", sender: username })
 }
 
+
+  const fetchContextSummary = async ({ forceRebuild = false } = {}) => {
+    setContextLoading(true);
+    setContextError(null);
+    try {
+      const meetingId = window.location.href;
+      const url = `${server_URL}/api/v1/transcript/generate-context-summary${
+        !forceRebuild ? `?meetingId=${encodeURIComponent(meetingId)}` : ""
+      }`;
+      const res = await fetch(url, {
+        method: forceRebuild ? "POST" : "GET",
+        headers: { "Content-Type": "application/json" },
+        body: forceRebuild ? JSON.stringify({ meetingId }) : undefined,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.message || `Request failed (${res.status})`);
+      }
+      setContextData(data);
+    } catch (e) {
+      setContextError(e.message || String(e));
+      setContextData(null);
+    } finally {
+      setContextLoading(false);
+    }
+  };
+
+  const openContextPanel = () => {
+    setShowModel(false);
+    setShowContextPanel(true);
+    // Only load existing summary; do not regenerate until user presses Refresh
+    fetchContextSummary({ forceRebuild: false });
+  };
+
+  const fetchAiContextInfo = async ({ forceRebuild = false } = {}) => {
+    setAiContextInfoLoading(true);
+    try {
+      const meetingId = window.location.href;
+      const url = `${server_URL}/api/v1/transcript/generate-context-summary${
+        !forceRebuild ? `?meetingId=${encodeURIComponent(meetingId)}` : ""
+      }`;
+      const res = await fetch(url, {
+        method: forceRebuild ? "POST" : "GET",
+        headers: { "Content-Type": "application/json" },
+        body: forceRebuild ? JSON.stringify({ meetingId }) : undefined,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.message || `Request failed (${res.status})`);
+      }
+      const overviewSec = Array.isArray(data.sections)
+        ? data.sections.find((s) => s.title === "Overview")
+        : null;
+      const upTo = overviewSec?.endTs ?? null;
+      setAiContextInfo({
+        upToTs: upTo,
+        generatedAt: data.generatedAt || null,
+      });
+    } catch (e) {
+      // On error, clear info but don't crash chat
+      setAiContextInfo(null);
+      console.error("Failed to load AI context info:", e);
+    } finally {
+      setAiContextInfoLoading(false);
+    }
+  };
+
+  const closeContextPanel = () => {
+    setShowContextPanel(false);
+  };
 
 let handleEndCall = () => {
   try {
@@ -760,45 +1021,280 @@ let handleEndCall = () => {
           </Button>
         </div>
       ) : (
-        <div className={styles.meetVideoContainer}> 
+        <div className={styles.meetVideoContainer}>
+
+          {showMeetingTimer && meetingStartMs && nowMs ? (
+            <div className={styles.meetingTimer}>
+              <AccessTimeIcon fontSize="small" sx={{ mr: 0.5 }} />
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                {formatMeetingTime((nowMs - meetingStartMs) / 1000)}
+              </span>
+            </div>
+          ) : null}
+
+          {showContextPanel ? (
+            <div className={styles.contextPanel}>
+              <div className={styles.contextHeader}>
+                <span className={styles.contextTitle}>Meeting context</span>
+                <span style={{ display: "flex", gap: 4 }}>
+                    <IconButton
+                    size="small"
+                    onClick={() => fetchContextSummary({ forceRebuild: true })}
+                    disabled={contextLoading}
+                    aria-label="Refresh context"
+                    sx={{ color: "#94a3b8" }}
+                  >
+                    <RefreshIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    onClick={closeContextPanel}
+                    aria-label="Close context"
+                    sx={{ color: "#94a3b8" }}
+                  >
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </div>
+
+              {contextLoading && (
+                <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
+                  <CircularProgress size={36} sx={{ color: "#38bdf8" }} />
+                </div>
+              )}
+
+              {contextError && !contextLoading && (
+                <Alert severity="error" sx={{ mb: 1, bgcolor: "rgba(127,29,29,0.35)", color: "#fecaca" }}>
+                  {contextError}
+                </Alert>
+              )}
+
+              {contextData && !contextLoading && (
+                <>
+                  {(() => {
+                    const overviewSec = contextData.sections?.find((s) => s.title === "Overview");
+                    const start = overviewSec?.startTs;
+                    const end = overviewSec?.endTs;
+                    if (start == null && end == null) return null;
+                    return (
+                      <div className={styles.timeBadge}>
+                        <span>Transcript span</span>
+                        <span>
+                          {formatMeetingTime(start)} → {formatMeetingTime(end)}
+                        </span>
+                      </div>
+                    );
+                  })()}
+
+                  {contextData.oneParagraphOverview ? (
+                    <p className={styles.overviewText}>{contextData.oneParagraphOverview}</p>
+                  ) : null}
+
+                  <div className={styles.timeline}>
+                    {(contextData.chain || []).map((point, idx) => {
+                      const { main, sub, startTs, endTs } = normalizeContextChainPoint(point);
+                      const timeLabel = formatTimeRangeLabel(startTs, endTs);
+                      return (
+                        <div key={idx} className={styles.timelineItem}>
+                          <span className={styles.timelineConnector} aria-hidden />
+                          <span className={styles.timelineDot} aria-hidden />
+                          <div className={styles.stepBody}>
+                            {timeLabel ? (
+                              <div className={styles.stepTime}>{timeLabel}</div>
+                            ) : null}
+                            <div className={styles.stepRowHead}>
+                              <span className={styles.stepIndex}>{idx + 1}.</span>
+                              <span className={styles.stepMain}>{main}</span>
+                            </div>
+                            {sub.length > 0 ? (
+                              <ul className={styles.subPoints}>
+                                {sub.map((line, j) => (
+                                  <li key={j}>{line}</li>
+                                ))}
+                              </ul>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {Array.isArray(contextData.highlights) && contextData.highlights.length > 0 ? (
+                    <div className={styles.highlightsBlock}>
+                      <div className={styles.highlightsTitle}>Highlights</div>
+                      <ul className={styles.subPoints} style={{ borderLeftColor: "rgba(56, 189, 248, 0.45)" }}>
+                        {contextData.highlights.map((raw, i) => {
+                          const hi = normalizeHighlightItem(raw);
+                          const hlTime = formatTimeRangeLabel(hi.startTs, hi.endTs);
+                          return (
+                            <li key={i}>
+                              {hlTime ? (
+                                <span className={styles.highlightTime}>{hlTime} · </span>
+                              ) : null}
+                              {hi.text}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </div>
+          ) : null}
 
           {showModel ? <div className={styles.chatRoom}>
 
               <div className={styles.chatContainer}>
-                    <h1>Chat</h1>
+                    <div className={styles.chatHeader}>
+                      <h1 style={{ margin: 0, fontSize: "1.25rem" }}>Chat</h1>
+                      <ToggleButtonGroup
+                        size="small"
+                        exclusive
+                        value={chatUiMode}
+                        onChange={(_, v) => v != null && setChatUiMode(v)}
+                        aria-label="chat mode"
+                      >
+                        <ToggleButton value="room">Room</ToggleButton>
+                        <ToggleButton value="ai">AI assistant</ToggleButton>
+                      </ToggleButtonGroup>
+                    </div>
+
+                    {chatUiMode === "ai" ? (
+                      <div className={styles.chatSubBar}>
+                        <ToggleButtonGroup
+                          size="small"
+                          exclusive
+                          value={aiContextMode}
+                          onChange={(_, v) => {
+                            if (v != null) {
+                              setAiContextMode(v);
+                              if (v === "context" && !aiContextInfo && !aiContextInfoLoading) {
+                                // Load existing summary for this meeting (no regeneration)
+                                fetchAiContextInfo({ forceRebuild: false });
+                              }
+                            }
+                          }}
+                          aria-label="AI context mode"
+                        >
+                          <ToggleButton value="context">Meeting context</ToggleButton>
+                          <ToggleButton value="general">General</ToggleButton>
+                        </ToggleButtonGroup>
+                        <Typography
+                          variant="caption"
+                          display="block"
+                          sx={{ mt: 0.5, color: "text.secondary" }}
+                        >
+                          {aiContextMode === "context"
+                            ? "Uses the latest saved meeting summary (no refresh unless you click)."
+                            : "Chat with the model without using this meeting’s transcript."}
+                        </Typography>
+                        {aiContextMode === "context" ? (
+                          <div style={{ marginTop: 8 }}>
+                            <Button
+                              variant="contained"
+                              size="small"
+                              onClick={() => fetchAiContextInfo({ forceRebuild: true })}
+                              disabled={aiContextInfoLoading}
+                              sx={{
+                                textTransform: "none",
+                                backgroundColor: "#020617",
+                                "&:hover": { backgroundColor: "#0f172a" },
+                              }}
+                            >
+                              {aiContextInfoLoading
+                                ? "Refreshing…"
+                                : aiContextInfo && aiContextInfo.upToTs != null
+                                ? `Context up to ${formatMeetingTime(aiContextInfo.upToTs)}`
+                                : "Generate meeting context"}
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
 
                     <div className={` overflow-y-auto  ${styles.chattingDisplay}`}>
-
-                                {messages.length !== 0 ? messages.map((item, index) => {
-
-                                    console.log(messages)
-                                    return (
-                                        <div style={{ marginBottom: "20px" }} key={index}>
-                                            <p style={{ fontWeight: "bold" }}>{item.sender}</p>
-                                            <p>{item.data}</p>
-                                        </div>
-                                    )
-                                }) : <p>No Messages Yet</p>}
-
-
+                      {chatUiMode === "room" ? (
+                        messages.length !== 0 ? (
+                          messages.map((item, index) => (
+                            <div style={{ marginBottom: "20px" }} key={index}>
+                              <p style={{ fontWeight: "bold" }}>{item.sender}</p>
+                              <p>{item.data}</p>
                             </div>
-
-
-                            
-                            <div className={`fixed bottom-0  right-0 p-4 bg-white border-t border-gray-300 z-50 ${styles.chattingArea}`} >
-                                <TextField value={message} onChange={(e) => setMessage(e.target.value)} id="outlined-basic" label="Enter Your chat" variant="outlined" />
-                                <Button variant='contained' onClick={sendMessage}>Send</Button>
+                          ))
+                        ) : (
+                          <p>No messages yet</p>
+                        )
+                      ) : aiChatMessages.length !== 0 || aiChatLoading ? (
+                        <>
+                          {aiChatMessages.map((item, index) => (
+                            <div
+                              style={{
+                                marginBottom: "16px",
+                                textAlign: item.role === "user" ? "right" : "left",
+                              }}
+                              key={index}
+                            >
+                              <p
+                                style={{
+                                  fontWeight: "bold",
+                                  fontSize: "0.75rem",
+                                  color: "#64748b",
+                                  marginBottom: 4,
+                                }}
+                              >
+                                {item.role === "user" ? "You" : "Assistant"}
+                              </p>
+                              <p
+                                style={{
+                                  display: "inline-block",
+                                  maxWidth: "92%",
+                                  margin: 0,
+                                  padding: "8px 12px",
+                                  borderRadius: 12,
+                                  background: item.role === "user" ? "#e0f2fe" : "#f1f5f9",
+                                  textAlign: "left",
+                                  whiteSpace: "pre-wrap",
+                                }}
+                              >
+                                {item.text}
+                              </p>
                             </div>
+                          ))}
+                          {aiChatLoading ? (
+                            <div style={{ display: "flex", justifyContent: "center", padding: 12 }}>
+                              <CircularProgress size={28} />
+                            </div>
+                          ) : null}
+                        </>
+                      ) : (
+                        <p>Ask the AI assistant anything. Turn on Meeting context to use the live transcript summary.</p>
+                      )}
+                    </div>
 
-
-
-
+                    <div className={`fixed bottom-0  right-0 p-4 bg-white border-t border-gray-300 z-50 ${styles.chattingArea}`} >
+                                <TextField
+                                  value={message}
+                                  onChange={(e) => setMessage(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                      e.preventDefault();
+                                      sendMessage();
+                                    }
+                                  }}
+                                  id="chat-input"
+                                  label={chatUiMode === "ai" ? "Message to AI" : "Enter your chat"}
+                                  variant="outlined"
+                                  fullWidth
+                                  multiline
+                                  maxRows={3}
+                                  disabled={chatUiMode === "ai" && aiChatLoading}
+                                />
+                                <Button variant='contained' onClick={sendMessage} disabled={chatUiMode === "ai" && aiChatLoading}>
+                                  Send
+                                </Button>
+                            </div>
               </div>
-
-
-
-
-
             </div>: <></> }
 
           <div className={styles.buttonContainers}>
@@ -826,8 +1322,38 @@ let handleEndCall = () => {
               <></>
             )}
 
+            <IconButton
+              onClick={() => {
+                if (showContextPanel) closeContextPanel();
+                else openContextPanel();
+              }}
+              style={{ color: showContextPanel ? "#38bdf8" : "white" }}
+              aria-label="Meeting context summary"
+              title="Meeting context"
+            >
+              <SummarizeIcon />
+            </IconButton>
+
+            <IconButton
+              onClick={() => setShowMeetingTimer((prev) => !prev)}
+              style={{ color: showMeetingTimer ? "#38bdf8" : "white" }}
+              aria-label="Toggle meeting timer"
+              title={showMeetingTimer ? "Hide meeting timer" : "Show meeting timer"}
+            >
+              <AccessTimeIcon />
+            </IconButton>
+
             <Badge badgeContent={newMessages} max={999} color="secondary">
-              <IconButton onClick={() => setShowModel(!showModel)} style={{ color: "white" }}>
+              <IconButton
+                onClick={() => {
+                  if (showModel) setShowModel(false);
+                  else {
+                    setShowContextPanel(false);
+                    setShowModel(true);
+                  }
+                }}
+                style={{ color: "white" }}
+              >
                 <ChatIcon />{" "}
               </IconButton>
             </Badge>
