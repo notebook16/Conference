@@ -7,10 +7,11 @@ let redisClient;
 
 async function initRedis() {
   if (!redisClient) {
-    redisClient = createRedisClient();
+    const redisUrl = process.env.REDIS_URL || "redis://127.0.0.1:6379";
+    redisClient = createRedisClient({ url: redisUrl });
     redisClient.on("error", (err) => console.error("Redis Client Error (flushWorker)", err));
     await redisClient.connect();
-    console.log("Redis client connected for flush worker");
+    console.log(`Redis client connected for flush worker (${redisUrl})`);
   }
   return redisClient;
 }
