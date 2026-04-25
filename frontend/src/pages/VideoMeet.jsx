@@ -33,6 +33,9 @@ export default function VideoMeet() {
   //use to notify the server about the client that it want's to connect
   //you can use socketRef to emit events like join-call or listen to events like user-joined.
   var socketRef = useRef();
+  var audioSocketRef = useRef();
+  var mediaRecorderRef = useRef();
+  let [captions, setCaptions] = useState([]);
 
   //use to store the users socket Id , use ti differntiate different people
   var socketIdRef = useRef(); 
@@ -387,6 +390,22 @@ export default function VideoMeet() {
 
     //(S1)
     socketRef.current = io.connect(server_URL, { secure: false });
+    // audio namespace for streaming microphone to server
+    try {
+      audioSocketRef.current = io.connect(`${server_URL}/audio`, { transports: ["websocket"] });
+      audioSocketRef.current.on("connect", () => {
+        console.log("audio socket connected", audioSocketRef.current.id);
+        // join same room as signaling (use URL as meeting key)
+        audioSocketRef.current.emit("join", window.location.href);
+      });
+      audioSocketRef.current.on("new-transcript", (seg) => {
+        console.log("Received transcript from /audio namespace:", seg);
+        // update captions UI
+        setCaptions((c) => [...c, { text: seg.text, start: seg.startTs, end: seg.endTs, speaker: seg.speakerId }]);
+      });
+    } catch (e) {
+      console.warn("Failed to connect audio socket:", e);
+    }
     //listen at backend ->
     {
       /*io.on("connection", (socket) => {
@@ -583,8 +602,91 @@ export default function VideoMeet() {
     // getUserMedia();
   };
   let handleAudio = () => {
-    setAudio(!audio);
+    const next = !audio;
+    setAudio(next);
+    // start/stop sending audio to backend when toggling audio on/off
+    if (next) {
+      startSendingAudio();
+    } else {
+      stopSendingAudio();
+    }
     // getUserMedia();
+  };
+
+  // start sending audio chunks from window.localStream to backend /audio namespace
+  const startSendingAudio = async () => {
+    try {
+      if (!audioSocketRef.current || !audioSocketRef.current.connected) {
+        console.warn("audio socket not connected");
+        return;
+      }
+
+      // prefer existing local audio track; if absent, request an audio-only stream
+      let stream = window.localStream;
+      if (!stream) {
+        console.warn("no local stream available for audio capture, requesting audio-only");
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+
+      // create MediaRecorder for audio track only
+      let audioTracks = stream.getAudioTracks();
+      if (!audioTracks || audioTracks.length === 0) {
+        console.warn("no audio tracks found on localStream, attempting to request audio-only");
+        const fresh = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
+        if (fresh) {
+          audioTracks = fresh.getAudioTracks();
+          stream = fresh;
+        }
+      }
+
+      if (!audioTracks || audioTracks.length === 0) {
+        console.warn("still no audio tracks found; cannot start MediaRecorder");
+        return;
+      }
+
+      const audioOnlyStream = new MediaStream([audioTracks[0]]);
+      const options = { mimeType: "audio/webm" };
+      // feature-detect mime type support
+      if (!MediaRecorder.isTypeSupported || !MediaRecorder.isTypeSupported(options.mimeType)) {
+        delete options.mimeType;
+      }
+      const mr = new MediaRecorder(audioOnlyStream, options);
+      mediaRecorderRef.current = mr;
+      let seq = 0;
+      mr.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioSocketRef.current.emit("stream-audio", {
+            data: e.data,
+            timestamp: Date.now(),
+            meetingId: window.location.href,
+            speakerId: username || "guest",
+            seq: seq++
+          });
+          console.log("Sent audio chunk seq", seq - 1);
+        }
+      };
+      mr.onstart = () => console.log("MediaRecorder started");
+      mr.onstop = () => console.log("MediaRecorder stopped");
+      // timeslice 1000ms for 1s chunks
+      mr.start(1000);
+    } catch (err) {
+      console.error("Failed to start sending audio:", err);
+    }
+  };
+
+  const stopSendingAudio = () => {
+    try {
+      const mr = mediaRecorderRef.current;
+      if (mr && mr.state !== "inactive") {
+        mr.stop();
+      }
+      mediaRecorderRef.current = null;
+      if (audioSocketRef.current && audioSocketRef.current.connected) {
+        audioSocketRef.current.emit("end-audio");
+      }
+    } catch (err) {
+      console.error("Failed to stop sending audio:", err);
+    }
   };
 
 
@@ -737,6 +839,15 @@ let handleEndCall = () => {
             autoPlay
             muted
           />
+
+          {/* Live captions display */}
+          <div style={{ position: "absolute", bottom: 120, left: 20, right: 20, zIndex: 50 }}>
+            {captions.slice(-3).map((c, idx) => (
+              <div key={idx} style={{ background: "rgba(0,0,0,0.6)", color: "white", padding: "6px 10px", marginBottom: 4, borderRadius: 6 }}>
+                <strong>{c.speaker || "Speaker"}:</strong> {c.text}
+              </div>
+            ))}
+          </div>
 
           <div className={styles.conferenceView} style={getGridStyle(videos.length)}>
             {videos.map((video) => (

@@ -1,3 +1,6 @@
+import { loadEnv } from "./loadEnv.js";
+loadEnv();
+
 import express from  "express";
 import {createServer} from "node:http";
 
@@ -9,13 +12,22 @@ import mongoose from "mongoose";
 import cors from "cors";
 
 import{ connectToSocket } from "./controllers/socketManager.js";
+import { attachAudioPipeline } from "./controllers/audioPipelineManager.js";
+import { startFlushWorker } from "./controllers/flushWorker.js";
 
 import userRoutes from "./routes/user.js";
+import transcriptRoutes from "./routes/transcript.js";
 
 
 const app = express();
 const server = createServer(app);
 const io = connectToSocket(server);
+// attach audio pipeline (gRPC <-> Redis <-> Socket) - modular and separate namespace
+attachAudioPipeline(io).then(() => {
+    console.log("Audio pipeline attached");
+}).catch((err) => {
+    console.error("Failed to attach audio pipeline:", err);
+});
 
 
 //middlewares
@@ -58,6 +70,7 @@ app.use(express.urlencoded({limit: "40kb" , extended: true})) //to parse html fo
 
 
 app.use("/api/v1/users", userRoutes);
+app.use("/api/v1/transcript", transcriptRoutes);
 
 
 
@@ -76,14 +89,21 @@ const start = async () => {
     const MONGO_URL = "mongodb+srv://navprince16:BP1RyQxjtyIOgNgR@conferencecluster.zsnek.mongodb.net/conferenceCluster?retryWrites=true&w=majority";
 
     //calling main function of db
-    main().then(() => {
-        console.log("connected to DB");
-    }).catch((err) => {
-        console.log(err);
-    });
-
     async function main() {
         await mongoose.connect(MONGO_URL);
+    }
+
+    try {
+        await main();
+        console.log("connected to DB");
+        // start flush worker after DB is connected
+        startFlushWorker().then(() => {
+            console.log("Flush worker started");
+        }).catch((err) => {
+            console.error("Failed to start flush worker:", err);
+        });
+    } catch (err) {
+        console.log(err);
     }
 
 
