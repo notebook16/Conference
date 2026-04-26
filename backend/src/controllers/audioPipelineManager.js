@@ -67,6 +67,7 @@ export async function attachAudioPipeline(io, opts = {}) {
             text,
             sequence: segmentSequence++,
             speakerId: socket.speakerId || "",
+            participantSocketId: socket.participantSocketId || "",
           };
           if (meetingId !== "unknown") {
             audioNs.to(meetingId).emit("new-transcript", payload);
@@ -152,6 +153,7 @@ export async function attachAudioPipeline(io, opts = {}) {
       try {
         ensureGrpcStream();
         if (payload.speakerId) socket.speakerId = payload.speakerId;
+        if (payload.participantSocketId) socket.participantSocketId = payload.participantSocketId;
         grpcCall.write({ audio_chunk: data });
       } catch (err) {
         console.error("Failed to write stream-audio to gRPC:", err);
