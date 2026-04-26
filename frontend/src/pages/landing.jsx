@@ -16,6 +16,8 @@ export default function LandingPage() {
 
   
   const [usernameFound, setUsernameFound] = useState(false); // Initialize state
+  const [guestMeetingCode, setGuestMeetingCode] = useState("");
+  const navigate = useNavigate();
 
 
 
@@ -112,6 +114,24 @@ export default function LandingPage() {
                 >
                   create meeting
                 </Link>
+              </div>
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                <TextField
+                  size="small"
+                  label="Join as guest (meeting code)"
+                  value={guestMeetingCode}
+                  onChange={(e) => setGuestMeetingCode(e.target.value)}
+                />
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    const room = guestMeetingCode.trim();
+                    if (!room) return;
+                    navigate(`/${room}`);
+                  }}
+                >
+                  Join as guest
+                </Button>
               </div>
             </div>
           </div>
