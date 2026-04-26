@@ -27,6 +27,35 @@ import Alert from "@mui/material/Alert";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import server from "../../environment";
 
+function TypingSubtitleText({ text, speed = 22 }) {
+  const [visibleText, setVisibleText] = useState("");
+
+  useEffect(() => {
+    const fullText = String(text || "");
+    if (!fullText) {
+      setVisibleText("");
+      return;
+    }
+
+    let i = 0;
+    setVisibleText("");
+    const timer = setInterval(() => {
+      i += 1;
+      setVisibleText(fullText.slice(0, i));
+      if (i >= fullText.length) clearInterval(timer);
+    }, speed);
+
+    return () => clearInterval(timer);
+  }, [text, speed]);
+
+  return (
+    <span className={styles.typingSubtitleText}>
+      {visibleText}
+      <span className={styles.typingCaret} aria-hidden />
+    </span>
+  );
+}
+
 function formatMeetingTime(s) {
   if (s == null || Number.isNaN(Number(s))) return "—";
   const total = Number(s);
@@ -1367,17 +1396,21 @@ let handleEndCall = () => {
           />
 
           {/* Live captions display */}
-          <div style={{ position: "absolute", bottom: 120, left: 20, right: 20, zIndex: 50 }}>
-            {captions.slice(-3).map((c, idx) => (
-              <div key={idx} style={{ background: "rgba(0,0,0,0.6)", color: "white", padding: "6px 10px", marginBottom: 4, borderRadius: 6 }}>
-                <strong>{c.speaker || "Speaker"}:</strong> {c.text}
+          <div className={styles.liveCaptionContainer}>
+            {captions.length > 0 ? (
+              <div
+                key={`${captions[captions.length - 1]?.start ?? "s"}-${captions[captions.length - 1]?.end ?? "e"}-${captions[captions.length - 1]?.text ?? ""}`}
+                className={styles.liveCaptionItem}
+              >
+                <strong>{captions[captions.length - 1]?.speaker || "Speaker"}:</strong>{" "}
+                <TypingSubtitleText text={captions[captions.length - 1]?.text || ""} />
               </div>
-            ))}
+            ) : null}
           </div>
 
           <div className={styles.conferenceView} style={getGridStyle(videos.length)}>
             {videos.map((video) => (
-              <div key={video.socketId}>
+              <div key={video.socketId} className={styles.participantTile}>
                 <video
                   data-socket={video.socketId}
                   ref={(ref) => {
@@ -1387,6 +1420,11 @@ let handleEndCall = () => {
                   }}
                   autoPlay
                 ></video>
+                {captions.length > 0 ? (
+                  <div className={styles.participantSubtitleOverlay}>
+                    <TypingSubtitleText text={captions[captions.length - 1]?.text || ""} />
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
