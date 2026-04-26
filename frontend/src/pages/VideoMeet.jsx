@@ -185,6 +185,7 @@ export default function VideoMeet() {
 
   //When a new participant joins, their video needs to be added to the list, and the UI needs to update to display their stream.
   let [videos, setVideos] = useState([]); // ?
+  const latestCaption = captions.length > 0 ? captions[captions.length - 1] : null;
 
   //1. this will run once and ask for permission
 
@@ -528,7 +529,16 @@ export default function VideoMeet() {
       audioSocketRef.current.on("new-transcript", (seg) => {
         console.log("Received transcript from /audio namespace:", seg);
         // update captions UI
-        setCaptions((c) => [...c, { text: seg.text, start: seg.startTs, end: seg.endTs, speaker: seg.speakerId }]);
+        setCaptions((c) => [
+          ...c,
+          {
+            text: seg.text,
+            start: seg.startTs,
+            end: seg.endTs,
+            speaker: seg.speakerId,
+            participantSocketId: seg.participantSocketId || null,
+          },
+        ]);
       });
     } catch (e) {
       console.warn("Failed to connect audio socket:", e);
@@ -825,6 +835,7 @@ export default function VideoMeet() {
             timestamp: Date.now(),
             meetingId: window.location.href,
             speakerId: username || "guest",
+            participantSocketId: socketIdRef.current || socketRef.current?.id || "",
             seq: seq++,
           });
         }
@@ -1397,13 +1408,13 @@ let handleEndCall = () => {
 
           {/* Live captions display */}
           <div className={styles.liveCaptionContainer}>
-            {captions.length > 0 ? (
+            {latestCaption ? (
               <div
-                key={`${captions[captions.length - 1]?.start ?? "s"}-${captions[captions.length - 1]?.end ?? "e"}-${captions[captions.length - 1]?.text ?? ""}`}
+                key={`${latestCaption.start ?? "s"}-${latestCaption.end ?? "e"}-${latestCaption.text ?? ""}`}
                 className={styles.liveCaptionItem}
               >
-                <strong>{captions[captions.length - 1]?.speaker || "Speaker"}:</strong>{" "}
-                <TypingSubtitleText text={captions[captions.length - 1]?.text || ""} />
+                <strong>{latestCaption.speaker || "Speaker"}:</strong>{" "}
+                <TypingSubtitleText text={latestCaption.text || ""} />
               </div>
             ) : null}
           </div>
@@ -1420,9 +1431,9 @@ let handleEndCall = () => {
                   }}
                   autoPlay
                 ></video>
-                {captions.length > 0 ? (
+                {latestCaption && latestCaption.participantSocketId === video.socketId ? (
                   <div className={styles.participantSubtitleOverlay}>
-                    <TypingSubtitleText text={captions[captions.length - 1]?.text || ""} />
+                    <TypingSubtitleText text={latestCaption.text || ""} />
                   </div>
                 ) : null}
               </div>
