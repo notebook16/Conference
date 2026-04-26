@@ -27,9 +27,17 @@ import Alert from "@mui/material/Alert";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import server from "../../environment";
 
+function captionForSocket(caption, socketId) {
+  if (!caption || caption.participantSocketId !== socketId) return null;
+  return {
+    text: caption.text || "",
+    speaker: caption.speaker || "Speaker",
+  };
+}
+
 const ParticipantVideoTile = React.memo(function ParticipantVideoTile({
   video,
-  latestCaption,
+  caption,
 }) {
   const tileVideoRef = useRef(null);
 
@@ -48,14 +56,25 @@ const ParticipantVideoTile = React.memo(function ParticipantVideoTile({
         autoPlay
         playsInline
       ></video>
-      {latestCaption && latestCaption.participantSocketId === video.socketId ? (
+      <div className={styles.participantNameBadge}>
+        {video.displayName || `Participant ${String(video.socketId || "").slice(0, 4)}`}
+      </div>
+      {caption ? (
         <div className={styles.participantSubtitleOverlay}>
-          <strong>{latestCaption.speaker || "Speaker"}:</strong>{" "}
-          <TypingSubtitleText text={latestCaption.text || ""} />
+          <strong>{caption.speaker}:</strong> <TypingSubtitleText text={caption.text} />
         </div>
       ) : null}
     </div>
   );
+}, (prevProps, nextProps) => {
+  const sameVideoStream = prevProps.video.stream === nextProps.video.stream;
+  const sameSocket = prevProps.video.socketId === nextProps.video.socketId;
+  const prevCaption = prevProps.caption;
+  const nextCaption = nextProps.caption;
+  const sameCaption =
+    (prevCaption == null && nextCaption == null) ||
+    (prevCaption?.text === nextCaption?.text && prevCaption?.speaker === nextCaption?.speaker);
+  return sameVideoStream && sameSocket && sameCaption;
 });
 
 function TypingSubtitleText({ text, speed = 22 }) {
@@ -217,6 +236,7 @@ export default function VideoMeet() {
   //When a new participant joins, their video needs to be added to the list, and the UI needs to update to display their stream.
   let [videos, setVideos] = useState([]); // ?
   const latestCaption = captions.length > 0 ? captions[captions.length - 1] : null;
+  const localCaption = captionForSocket(latestCaption, socketIdRef.current);
 
   //1. this will run once and ask for permission
 
@@ -1437,10 +1457,11 @@ let handleEndCall = () => {
               autoPlay
               muted
             />
-            {latestCaption && latestCaption.participantSocketId === socketIdRef.current ? (
+            <div className={styles.participantNameBadge}>You{username ? ` (${username})` : ""}</div>
+            {localCaption ? (
               <div className={styles.participantSubtitleOverlay}>
-                <strong>{latestCaption.speaker || "Speaker"}:</strong>{" "}
-                <TypingSubtitleText text={latestCaption.text || ""} />
+                <strong>{localCaption.speaker}:</strong>{" "}
+                <TypingSubtitleText text={localCaption.text} />
               </div>
             ) : null}
           </div>
@@ -1450,7 +1471,7 @@ let handleEndCall = () => {
               <ParticipantVideoTile
                 key={video.socketId}
                 video={video}
-                latestCaption={latestCaption}
+                caption={captionForSocket(latestCaption, video.socketId)}
               />
             ))}
           </div>
