@@ -56,6 +56,51 @@ body, html {
     border-radius: 20px;
 }
 
+.liveCaptionContainer {
+    position: absolute;
+    bottom: 86px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    width: min(88vw, 980px);
+    display: flex;
+    justify-content: center;
+}
+
+.liveCaptionItem {
+    background: rgba(2, 6, 23, 0.72);
+    color: #f8fafc;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    backdrop-filter: blur(2px);
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+}
+
+.typingSubtitleText {
+    display: inline;
+    white-space: nowrap;
+}
+
+.typingCaret {
+    display: inline-block;
+    width: 1px;
+    height: 1em;
+    margin-left: 2px;
+    vertical-align: -2px;
+    background: #93c5fd;
+    animation: caretBlink 0.9s steps(1, end) infinite;
+}
+
+@keyframes caretBlink {
+    0%, 45% { opacity: 1; }
+    46%, 100% { opacity: 0; }
+}
+
 .conferenceView {
     width: 100%;
     height: 100%;
@@ -71,6 +116,29 @@ body, html {
     justify-content: center;
     overflow: hidden;
   }
+
+.participantTile {
+    position: relative;
+}
+
+.participantSubtitleOverlay {
+    position: absolute;
+    left: 50%;
+    bottom: 10px;
+    transform: translateX(-50%);
+    max-width: calc(100% - 20px);
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: rgba(2, 6, 23, 0.72);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    color: #f8fafc;
+    font-size: 0.88rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+    pointer-events: none;
+}
   
   .conferenceView video {
     width: 100%; /* Make sure videos take up available space */
