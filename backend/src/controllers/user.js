@@ -73,7 +73,12 @@ const register = async (req, res) => {
 
 
 const addToHistory = async (req, res) => {
-    const { token, meetingCode } = req.body;
+    const { token, meetingCode, meeting_code } = req.body;
+    const resolvedMeetingCode = String(meetingCode ?? meeting_code ?? "").trim();
+
+    if (!token || !resolvedMeetingCode) {
+        return res.status(400).json({ message: "token and meetingCode are required" });
+    }
 
     // Find user by token
     const user = await User.findOne({token: token });
@@ -84,7 +89,7 @@ const addToHistory = async (req, res) => {
     // Create a new meeting
     const meeting = new Meeting({
         user_id: user._id, // Link to the user
-        meetingCode,
+        meetingCode: resolvedMeetingCode,
     });
 
     await meeting.save();
@@ -94,6 +99,30 @@ const addToHistory = async (req, res) => {
     await user.save();
 
     res.status(201).json({ message: "Meeting created", meeting });
+};
+
+const validateSession = async (req, res) => {
+    const token = String(req.query?.token ?? req.body?.token ?? "").trim();
+    if (!token) {
+        return res.status(400).json({ message: "token is required" });
+    }
+
+    try {
+        const user = await User.findOne({ token }).select("_id name userName token");
+        if (!user) {
+            return res.status(401).json({ valid: false, message: "Invalid session" });
+        }
+        return res.status(200).json({
+            valid: true,
+            user: {
+                id: user._id,
+                name: user.name,
+                username: user.userName,
+            },
+        });
+    } catch (e) {
+        return res.status(500).json({ valid: false, message: `Something went wrong ${e}` });
+    }
 };
 
 const getUserHistory = async(req,res) =>{
@@ -113,4 +142,4 @@ const getUserHistory = async(req,res) =>{
 
 
 
-export { login, register, addToHistory , getUserHistory }
+export { login, register, addToHistory, getUserHistory, validateSession }

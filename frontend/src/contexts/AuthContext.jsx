@@ -1,6 +1,6 @@
 import axios from "axios";
 import httpStatus from "http-status";
-import { createContext, useContext, useState } from "react";
+import { createContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import server from "../../environment";
 
@@ -81,13 +81,32 @@ export const AuthProvider = ({ children }) => {
         try {
             let request = await client.post("/add_to_activity", {
                 token: localStorage.getItem("token"),
-                meeting_code: meetingCode
+                meetingCode
             });
             return request
         } catch (e) {
             throw e;
         }
     }
+
+    const validateSession = async () => {
+        const token = localStorage.getItem("token");
+        if (!token) return { valid: false };
+        try {
+            const request = await client.get("/validate_session", { params: { token } });
+            if (request?.data?.valid) {
+                const resolvedUsername = request.data.user?.username || "";
+                if (resolvedUsername) {
+                    localStorage.setItem("username", resolvedUsername);
+                }
+            }
+            return request.data;
+        } catch (e) {
+            localStorage.removeItem("token");
+            localStorage.removeItem("username");
+            return { valid: false };
+        }
+    };
 
     // Data that will be provided to children components
     const data = {
@@ -96,7 +115,8 @@ export const AuthProvider = ({ children }) => {
         handleRegister,
         handleLogin,
         addToUserHistory, 
-        getHistoryOfUser
+        getHistoryOfUser,
+        validateSession
     };
 
     // Return the provider with children wrapped inside it
