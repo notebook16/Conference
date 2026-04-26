@@ -316,6 +316,16 @@ export default function VideoMeet() {
       };
     }
   };
+
+  const activeRightPanelWidth = showModel ? "30vw" : showContextPanel ? "min(440px, 92vw)" : "0px";
+  const stageStyle = {
+    ...getGridStyle(videos.length),
+    width: `calc(100% - ${activeRightPanelWidth})`,
+    marginRight: activeRightPanelWidth,
+    transition: "width 220ms ease, margin-right 220ms ease",
+    paddingBottom: "11vh",
+    boxSizing: "border-box",
+  };
   
   
 
@@ -419,19 +429,6 @@ export default function VideoMeet() {
     }
   };
 
-  //use effect(2)
-  //8.1 the change in audio video states will trigger this use effect
-  //8.2 this will check the audio video states and call the method getUserMedia
-  useEffect(() => {
-
-    console.log("getUserMedia use effect called")
-    if (video !== undefined && audio !== undefined) {
-      console.log("Triggering getUserMedia due to state change:", video, audio);
-      getUserMedia();
-      console.log("SET STATE HAS ", video, audio);
-    }
-  }, [video, audio]);
-
   //6. this function (getMedia) triggers by step 5
   //7. it changes the state of video and audio to avilable permisssion here, video and audio are used in calls like when we toggle video aur audio during meeting
   //8(search for sub points). this change in video and audio states trigger the use effect(2) , which will handel the rest
@@ -445,6 +442,7 @@ export default function VideoMeet() {
     }
     setVideo(videoAvailable);
     setAudio(audioAvailable);
+    getUserMedia(videoAvailable, audioAvailable);
     connectToSocketServer(displayName);
   };
 
@@ -528,11 +526,11 @@ export default function VideoMeet() {
 
   //8.2.1 this function use used to get the current stream(can be audio or video) and send it to function "getMediaSuccess" for further operation
 
-  let getUserMedia = () => {
+  let getUserMedia = (nextVideo = video, nextAudio = audio) => {
     console.log("get user media called");
-    if ((video && videoAvailable) || (audio && audioAvailable)) {
+    if ((nextVideo && videoAvailable) || (nextAudio && audioAvailable)) {
       navigator.mediaDevices
-        .getUserMedia({ video: video, audio: audio })
+        .getUserMedia({ video: nextVideo, audio: nextAudio })
         .then(getUserMediaSuccess) //here it passes current stream from hardware to the "getUserMediaSuccess" function
         .then((stream) => {})
         .catch((err) => console.log(err));
@@ -836,12 +834,26 @@ export default function VideoMeet() {
   };
 
   let handleVideo = () => {
-    setVideo(!video);
-    // getUserMedia();
+    const next = !video;
+    setVideo(next);
+    const videoTrack = window.localStream?.getVideoTracks?.()[0];
+    if (videoTrack) {
+      videoTrack.enabled = next;
+      return;
+    }
+    if (next) {
+      getUserMedia(true, audio ?? audioAvailable);
+    }
   };
   let handleAudio = () => {
     const next = !audio;
     setAudio(next);
+    const audioTrack = window.localStream?.getAudioTracks?.()[0];
+    if (audioTrack) {
+      audioTrack.enabled = next;
+    } else if (next) {
+      getUserMedia(video ?? videoAvailable, true);
+    }
     // start/stop sending audio to backend when toggling audio on/off
     if (next) {
       startSendingAudio();
@@ -1520,7 +1532,7 @@ let handleEndCall = () => {
             ) : null}
           </div>
 
-          <div className={styles.conferenceView} style={getGridStyle(videos.length)}>
+          <div className={styles.conferenceView} style={stageStyle}>
             {videos.map((video) => (
               <ParticipantVideoTile
                 key={video.socketId}
