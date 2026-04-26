@@ -47,38 +47,20 @@ body, html {
     font-size: 3rem;
 }
 
-.meetUserVideo {
+.meetUserTile {
     position: absolute;
     bottom: 10vh;
+    left: 0;
     height: 20vh;
     width: auto;
-    left: 0;
     border-radius: 20px;
-}
-
-.liveCaptionContainer {
-    position: absolute;
-    bottom: 86px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 50;
-    width: min(88vw, 980px);
-    display: flex;
-    justify-content: center;
-}
-
-.liveCaptionItem {
-    background: rgba(2, 6, 23, 0.72);
-    color: #f8fafc;
-    padding: 10px 14px;
-    border-radius: 8px;
-    border: 1px solid rgba(148, 163, 184, 0.25);
-    backdrop-filter: blur(2px);
-    max-width: 100%;
-    white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;
-    text-align: center;
+}
+
+.meetUserVideo {
+    height: 100%;
+    width: auto;
+    border-radius: 20px;
 }
 
 .typingSubtitleText {

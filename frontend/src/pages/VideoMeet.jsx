@@ -1399,20 +1399,15 @@ let handleEndCall = () => {
             </Badge>
           </div>
 
-          <video
-            className={styles.meetUserVideo}
-            ref={localVideoref}
-            autoPlay
-            muted
-          />
-
-          {/* Live captions display */}
-          <div className={styles.liveCaptionContainer}>
-            {latestCaption ? (
-              <div
-                key={`${latestCaption.start ?? "s"}-${latestCaption.end ?? "e"}-${latestCaption.text ?? ""}`}
-                className={styles.liveCaptionItem}
-              >
+          <div className={styles.meetUserTile}>
+            <video
+              className={styles.meetUserVideo}
+              ref={localVideoref}
+              autoPlay
+              muted
+            />
+            {latestCaption && latestCaption.participantSocketId === socketIdRef.current ? (
+              <div className={styles.participantSubtitleOverlay}>
                 <strong>{latestCaption.speaker || "Speaker"}:</strong>{" "}
                 <TypingSubtitleText text={latestCaption.text || ""} />
               </div>
@@ -1433,6 +1428,7 @@ let handleEndCall = () => {
                 ></video>
                 {latestCaption && latestCaption.participantSocketId === video.socketId ? (
                   <div className={styles.participantSubtitleOverlay}>
+                    <strong>{latestCaption.speaker || "Speaker"}:</strong>{" "}
                     <TypingSubtitleText text={latestCaption.text || ""} />
                   </div>
                 ) : null}
