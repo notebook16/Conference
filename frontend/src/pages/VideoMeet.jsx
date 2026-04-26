@@ -27,6 +27,37 @@ import Alert from "@mui/material/Alert";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import server from "../../environment";
 
+const ParticipantVideoTile = React.memo(function ParticipantVideoTile({
+  video,
+  latestCaption,
+}) {
+  const tileVideoRef = useRef(null);
+
+  useEffect(() => {
+    if (!tileVideoRef.current || !video?.stream) return;
+    if (tileVideoRef.current.srcObject !== video.stream) {
+      tileVideoRef.current.srcObject = video.stream;
+    }
+  }, [video?.stream]);
+
+  return (
+    <div className={styles.participantTile}>
+      <video
+        data-socket={video.socketId}
+        ref={tileVideoRef}
+        autoPlay
+        playsInline
+      ></video>
+      {latestCaption && latestCaption.participantSocketId === video.socketId ? (
+        <div className={styles.participantSubtitleOverlay}>
+          <strong>{latestCaption.speaker || "Speaker"}:</strong>{" "}
+          <TypingSubtitleText text={latestCaption.text || ""} />
+        </div>
+      ) : null}
+    </div>
+  );
+});
+
 function TypingSubtitleText({ text, speed = 22 }) {
   const [visibleText, setVisibleText] = useState("");
 
@@ -1416,23 +1447,11 @@ let handleEndCall = () => {
 
           <div className={styles.conferenceView} style={getGridStyle(videos.length)}>
             {videos.map((video) => (
-              <div key={video.socketId} className={styles.participantTile}>
-                <video
-                  data-socket={video.socketId}
-                  ref={(ref) => {
-                    if (ref && video.stream) {
-                      ref.srcObject = video.stream;
-                    }
-                  }}
-                  autoPlay
-                ></video>
-                {latestCaption && latestCaption.participantSocketId === video.socketId ? (
-                  <div className={styles.participantSubtitleOverlay}>
-                    <strong>{latestCaption.speaker || "Speaker"}:</strong>{" "}
-                    <TypingSubtitleText text={latestCaption.text || ""} />
-                  </div>
-                ) : null}
-              </div>
+              <ParticipantVideoTile
+                key={video.socketId}
+                video={video}
+                latestCaption={latestCaption}
+              />
             ))}
           </div>
         </div>
