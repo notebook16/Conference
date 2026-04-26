@@ -4,6 +4,7 @@ import { Server } from "socket.io"
 let connections = {}
 let messages = {}
 let timeOnline = {}
+let socketProfiles = {}
 
 
 
@@ -27,7 +28,7 @@ export const connectToSocket = (server) => {
 
         console.log("SOMETHING CONNECTED")
 
-        socket.on("join-call", (path) => {
+        socket.on("join-call", (path, profile = {}) => {
 
 
             //if no one has joined the call intiate the empty array of socketId named as path 
@@ -35,6 +36,10 @@ export const connectToSocket = (server) => {
                 connections[path] = []
             }
             connections[path].push(socket.id) //push new socketId into the pirtucalar room
+            socket.data.roomPath = path;
+
+            const rawName = String(profile?.displayName ?? profile?.username ?? "").trim();
+            socketProfiles[socket.id] = rawName || `Participant-${socket.id.slice(0, 4)}`;
 
             //the whole connections[path] represent the array of socket.id in room
             
@@ -47,8 +52,17 @@ export const connectToSocket = (server) => {
                 
             //socket.id is the socket ID of the user who just joined the room (this is the "new user" in this context). This value is sent to the client so they know which user joined.
                 io.to(connections[path][a]).emit("user-joined", socket.id, connections[path])
+                io.to(connections[path][a]).emit("participant-meta", socket.id, socketProfiles[socket.id])
                 
             }
+
+            // send already-known participant names to the newly joined socket
+            connections[path].forEach((memberSocketId) => {
+                const displayName = socketProfiles[memberSocketId];
+                if (displayName) {
+                    io.to(socket.id).emit("participant-meta", memberSocketId, displayName);
+                }
+            });
 
             if (messages[path] !== undefined) {
                 for (let a = 0; a < messages[path].length; ++a) {
@@ -120,6 +134,8 @@ export const connectToSocket = (server) => {
                 }
 
             }
+
+            delete socketProfiles[socket.id];
 
 
         })

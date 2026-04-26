@@ -34,6 +34,7 @@ function NewMeet() {
             <Button
               onClick={() => {
                 localStorage.removeItem("token");
+                localStorage.removeItem("username");
                 navigate("/auth");
               }}
             >

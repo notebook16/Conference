@@ -25,7 +25,7 @@ export default function LandingPage() {
     } else {
       setUsernameFound(false); // Set state if no username
     }
-  }, [usernameFound]); // Dependency array ensures it runs only when username changes
+  }, [username]); // Re-run when stored username changes
 
 
   return (

@@ -38,6 +38,7 @@ function captionForSocket(caption, socketId) {
 const ParticipantVideoTile = React.memo(function ParticipantVideoTile({
   video,
   caption,
+  isSolo,
 }) {
   const tileVideoRef = useRef(null);
 
@@ -49,7 +50,7 @@ const ParticipantVideoTile = React.memo(function ParticipantVideoTile({
   }, [video?.stream]);
 
   return (
-    <div className={styles.participantTile}>
+    <div className={`${styles.participantTile} ${isSolo ? styles.participantTileSolo : ""}`}>
       <video
         data-socket={video.socketId}
         ref={tileVideoRef}
@@ -74,7 +75,7 @@ const ParticipantVideoTile = React.memo(function ParticipantVideoTile({
   const sameCaption =
     (prevCaption == null && nextCaption == null) ||
     (prevCaption?.text === nextCaption?.text && prevCaption?.speaker === nextCaption?.speaker);
-  return sameVideoStream && sameSocket && sameCaption;
+  return sameVideoStream && sameSocket && sameCaption && prevProps.isSolo === nextProps.isSolo;
 });
 
 function TypingSubtitleText({ text, speed = 22 }) {
@@ -193,6 +194,7 @@ export default function VideoMeet() {
   const [showMeetingTimer, setShowMeetingTimer] = useState(true);
   const [meetingStartMs, setMeetingStartMs] = useState(null);
   const [nowMs, setNowMs] = useState(null);
+  const [sessionBootstrapped, setSessionBootstrapped] = useState(false);
 
   //use to store the users socket Id , use ti differntiate different people
   var socketIdRef = useRef(); 
@@ -237,21 +239,48 @@ export default function VideoMeet() {
   let [videos, setVideos] = useState([]); // ?
   const latestCaption = captions.length > 0 ? captions[captions.length - 1] : null;
   const localCaption = captionForSocket(latestCaption, socketIdRef.current);
+  const [participantNames, setParticipantNames] = useState({});
 
-  //1. this will run once and ask for permission
+  const resolveDisplayName = (value) => String(value || "").trim();
 
-  const getUsername = localStorage.getItem('username');
-  console.log(`username from storage ${getUsername}`)
+  // Bootstrap session identity from Mongo-backed token.
+  useEffect(() => {
+    const bootstrapSession = async () => {
+      const token = localStorage.getItem("token");
+      const storedUsername = resolveDisplayName(localStorage.getItem("username"));
+      let resolvedUsername = storedUsername;
 
-  useEffect(()=>{
-    if(getUsername){
-      setAskForUserName(false);
-      getMedia();
-    }
-    else{
-      setAskForUserName(true);
-    }
-  },[getUsername])
+      if (token) {
+        try {
+          const response = await fetch(
+            `${server_URL}/api/v1/users/validate_session?token=${encodeURIComponent(token)}`
+          );
+          const payload = await response.json().catch(() => ({}));
+          if (response.ok && payload?.valid && payload?.user?.username) {
+            resolvedUsername = resolveDisplayName(payload.user.username);
+            localStorage.setItem("username", resolvedUsername);
+          } else {
+            localStorage.removeItem("token");
+            localStorage.removeItem("username");
+            resolvedUsername = "";
+          }
+        } catch (e) {
+          console.warn("Session validation failed, falling back to local identity", e);
+        }
+      }
+
+      if (resolvedUsername) {
+        setUsername(resolvedUsername);
+        setAskForUserName(false);
+        getMedia(resolvedUsername);
+      } else {
+        setAskForUserName(true);
+      }
+      setSessionBootstrapped(true);
+    };
+
+    bootstrapSession();
+  }, []);
 
   useEffect(() => {
     console.log("permisssion use effect")
@@ -407,7 +436,7 @@ export default function VideoMeet() {
   //7. it changes the state of video and audio to avilable permisssion here, video and audio are used in calls like when we toggle video aur audio during meeting
   //8(search for sub points). this change in video and audio states trigger the use effect(2) , which will handel the rest
   //9. then the connection beteeen peers is stablished with "connectToSocketServer"
-  let getMedia = () => {
+  let getMedia = (displayName) => {
     console.log("get media called")
     if (!meetingStartMs) {
       const now = Date.now();
@@ -416,7 +445,7 @@ export default function VideoMeet() {
     }
     setVideo(videoAvailable);
     setAudio(audioAvailable);
-    connectToSocketServer();
+    connectToSocketServer(displayName);
   };
 
   //call after getUserMedia
@@ -562,7 +591,7 @@ export default function VideoMeet() {
 
   //7.1 trigger by step 7 below,
   //establishes the connection between the frontend (client) and the backend (signaling server) for a WebRTC-based peer-to-peer video call application.
-  let connectToSocketServer = () => {
+  let connectToSocketServer = (displayName) => {
     //for initiating the connection from frontend(client) to backend( signaling server)
 
     console.log("connect to socket called");
@@ -612,7 +641,12 @@ export default function VideoMeet() {
     //(S2)
     socketRef.current.on("connect", () => {
       //(S3)
-      socketRef.current.emit("join-call", window.location.href);
+      const finalDisplayName = resolveDisplayName(displayName) || resolveDisplayName(username) || "Guest";
+      socketRef.current.emit("join-call", window.location.href, {
+        username: finalDisplayName,
+        displayName: finalDisplayName,
+        token: localStorage.getItem("token") || null,
+      });
       //listen at  backened ->
       {
         /* socket.on("join-call", (path) => {....    */
@@ -621,6 +655,10 @@ export default function VideoMeet() {
       //storing the current user socketId
       //the "id" will generate by socketio automaticallly
       socketIdRef.current = socketRef.current.id;
+      setParticipantNames((prev) => ({
+        ...prev,
+        [socketRef.current.id]: finalDisplayName,
+      }));
 
       //use-case ->
       //emit from backend (Ln 76 ,    Ln42)
@@ -628,6 +666,9 @@ export default function VideoMeet() {
         /*.emit("chat-message", data, sender, socket.id) */
       }
       socketRef.current.on("chat-message", addMessage);
+      socketRef.current.on("participant-meta", (id, displayName) => {
+        setParticipantNames((prev) => ({ ...prev, [id]: displayName }));
+      });
 
       //when user left
       // emit from backend(Ln 95) ->
@@ -636,6 +677,11 @@ export default function VideoMeet() {
       }
       socketRef.current.on("user-left", (id) => {
         setVideos((videos) => videos.filter((video) => video.socketId !== id));
+        setParticipantNames((prev) => {
+          const updated = { ...prev };
+          delete updated[id];
+          return updated;
+        });
       });
 
       //from backend(Ln 37)
@@ -781,8 +827,12 @@ export default function VideoMeet() {
   //5. this connect function call getMedia function
   let connect = () => {
     console.log("connect clicked")
+    const cleaned = resolveDisplayName(username);
+    const finalName = cleaned || `Guest-${Math.floor(Math.random() * 900 + 100)}`;
+    setUsername(finalName);
+    localStorage.setItem("username", finalName);
     setAskForUserName(false);
-    getMedia();
+    getMedia(finalName);
   };
 
   let handleVideo = () => {
@@ -1088,7 +1138,11 @@ let handleEndCall = () => {
 
   return (
     <div className=" h-screen w-screen overflow-hidden bg-gradient-to-br from-blue-400 via-pink-300 to-green-200">
-      {askForUsername === true ? (
+      {!sessionBootstrapped ? (
+        <div className="h-full w-full flex items-center justify-center text-white text-lg font-medium">
+          Loading your meeting...
+        </div>
+      ) : askForUsername === true ? (
         <div className="flex flex-col justify-center items-center mt-16" 
         >
           
@@ -1470,8 +1524,14 @@ let handleEndCall = () => {
             {videos.map((video) => (
               <ParticipantVideoTile
                 key={video.socketId}
-                video={video}
+                video={{
+                  ...video,
+                  displayName:
+                    participantNames[video.socketId] ||
+                    `Participant ${String(video.socketId || "").slice(0, 4)}`,
+                }}
                 caption={captionForSocket(latestCaption, video.socketId)}
+                isSolo={videos.length === 1}
               />
             ))}
           </div>
